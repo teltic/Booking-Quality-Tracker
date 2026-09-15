@@ -1,0 +1,10 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Generated workbook output stays local.
+output/
+*.xlsx
+!config/*.xlsx

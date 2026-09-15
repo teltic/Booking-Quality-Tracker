@@ -1,0 +1,10 @@
+# One entry per property. Add more listings here to scale the portfolio --
+# the script loops over this list rather than hardcoding property names.
+listings:
+  - name: Mesquite Vacation Rental
+    pms: smartbnb
+    listing_id: dec5d2ed-4400-4350-8df3-af76b5d3d09c
+
+  - name: Sauna Cold Plunge 5BR
+    pms: smartbnb
+    listing_id: 0e251a6a-3ea4-4d32-878a-cd734591c925
