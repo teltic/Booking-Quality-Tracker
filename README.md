@@ -24,6 +24,11 @@ Get your API key from the PriceLabs dashboard: Account Settings > API.
 Edit `config/listings.yaml` to add/remove properties (PMS name + listing
 ID for each).
 
+**Where output gets saved is set separately, not in `.env`.** `.env` only
+ever holds `PRICELABS_API_KEY`. The output folder is the `OUTPUT_DIR` line
+near the top of `run_daily.bat` -- edit that file directly if you want to
+change it (see Usage below).
+
 ## Usage
 
 ### One-click / daily automated (Windows)
