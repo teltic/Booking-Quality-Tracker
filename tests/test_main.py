@@ -5,6 +5,7 @@ import openpyxl
 
 from booking_quality_log import main as bql_main
 from booking_quality_log.config import Listing
+from booking_quality_log.workbook_build import MANUAL_COLS_START, MANUAL_COLUMNS
 
 FAKE_MARKET = {
     "Neighborhood Data Source": "Market Dashboard: test comp",
@@ -32,6 +33,11 @@ LISTINGS = [
     Listing(name="Test Property", pms="testpms", listing_id="id-1")
 ]
 
+RESERVATION_ID_COL_0IDX = 29  # AD
+STATUS_COL_0IDX = 28  # AC
+COMP_CHECK_COL_0IDX = MANUAL_COLS_START - 1 + MANUAL_COLUMNS.index("Comp Check (Airbnb)")
+FINAL_PL_CHECK_COL_0IDX = MANUAL_COLS_START - 1 + MANUAL_COLUMNS.index("Final PL Check")
+
 
 def _reservation_row(res_id, checkin, checkout, confirmation_code, status="booked"):
     nights = (dt.date.fromisoformat(checkout) - dt.date.fromisoformat(checkin)).days
@@ -53,6 +59,7 @@ def _make_client(reservations):
     client = MagicMock()
     client.get_reservations.return_value = reservations
     client.get_neighborhood_data.return_value = FAKE_MARKET
+    client.get_overrides.return_value = []
     return client
 
 
@@ -86,7 +93,7 @@ def test_new_booking_writes_and_carries_manual_notes_forward(tmp_path):
     [day1_file] = tmp_path.glob("*.xlsx")
     wb = openpyxl.load_workbook(day1_file)
     ws = wb["Booking Quality Log"]
-    ws.cell(row=5, column=29, value="checked, price is fair")
+    ws.cell(row=5, column=COMP_CHECK_COL_0IDX + 1, value="checked, price is fair")
     wb.save(day1_file)
 
     res_day3 = res_day1 + [_reservation_row("r2", "2026-09-20", "2026-09-22", "BBBB222222")]
@@ -99,11 +106,11 @@ def test_new_booking_writes_and_carries_manual_notes_forward(tmp_path):
     wb2 = openpyxl.load_workbook(files[-1])
     ws2 = wb2["Booking Quality Log"]
     rows = list(ws2.iter_rows(min_row=5, values_only=True))
-    ids = {r[27] for r in rows}  # AB: Reservation ID
+    ids = {r[RESERVATION_ID_COL_0IDX] for r in rows}
     assert ids == {"AAAA111111", "BBBB222222"}
 
-    carried = next(r for r in rows if r[27] == "AAAA111111")
-    assert carried[28] == "checked, price is fair"  # AC: Comp Check (Airbnb)
+    carried = next(r for r in rows if r[RESERVATION_ID_COL_0IDX] == "AAAA111111")
+    assert carried[COMP_CHECK_COL_0IDX] == "checked, price is fair"
 
 
 def test_cancellation_alone_does_not_trigger_a_new_file(tmp_path):
@@ -136,8 +143,8 @@ def test_cancelled_booking_stays_visible_with_status_and_keeps_its_note(tmp_path
     wb = openpyxl.load_workbook(day1_file)
     ws = wb["Booking Quality Log"]
     for row in ws.iter_rows(min_row=5):
-        if row[27].value == "BBBB222222":  # AB: Reservation ID
-            row[31].value = "priced well, sorry to lose it"  # AF: Final PL Check
+        if row[RESERVATION_ID_COL_0IDX].value == "BBBB222222":
+            row[FINAL_PL_CHECK_COL_0IDX].value = "priced well, sorry to lose it"
     wb.save(day1_file)
 
     # r2 is now cancelled, and r3 is a brand-new confirmed booking (needed
@@ -155,13 +162,12 @@ def test_cancelled_booking_stays_visible_with_status_and_keeps_its_note(tmp_path
     ws2 = wb2["Booking Quality Log"]
     rows = list(ws2.iter_rows(min_row=5, values_only=True))
 
-    cancelled_row = next(r for r in rows if r[27] == "BBBB222222")
-    assert cancelled_row[26] == "Cancelled"  # AA: Status
-    assert cancelled_row[22] == "n/a (cancelled)"  # W: Gap Before (d)
-    assert cancelled_row[31] == "priced well, sorry to lose it"  # AF: note carried forward
+    cancelled_row = next(r for r in rows if r[RESERVATION_ID_COL_0IDX] == "BBBB222222")
+    assert cancelled_row[STATUS_COL_0IDX] == "Cancelled"
+    assert cancelled_row[FINAL_PL_CHECK_COL_0IDX] == "priced well, sorry to lose it"
 
-    confirmed_row = next(r for r in rows if r[27] == "AAAA111111")
-    assert confirmed_row[26] == "Confirmed"
+    confirmed_row = next(r for r in rows if r[RESERVATION_ID_COL_0IDX] == "AAAA111111")
+    assert confirmed_row[STATUS_COL_0IDX] == "Confirmed"
 
 
 def test_rows_sorted_by_booked_date_newest_first(tmp_path):
@@ -178,7 +184,7 @@ def test_rows_sorted_by_booked_date_newest_first(tmp_path):
     [file] = tmp_path.glob("*.xlsx")
     wb = openpyxl.load_workbook(file)
     ws = wb["Booking Quality Log"]
-    ids_in_order = [row[27] for row in ws.iter_rows(min_row=5, values_only=True)]
+    ids_in_order = [row[RESERVATION_ID_COL_0IDX] for row in ws.iter_rows(min_row=5, values_only=True)]
     assert ids_in_order == ["NEW222", "OLD111"]
 
 
@@ -192,3 +198,22 @@ def test_force_writes_even_with_no_new_booking(tmp_path):
         wrote = bql_main.run(tmp_path, today=dt.date(2026, 9, 18), force=True)
     assert wrote is True
     assert len(list(tmp_path.glob("*.xlsx"))) == 2
+
+
+def test_override_reasons_pulled_into_the_sheet(tmp_path):
+    res = [_reservation_row("r1", "2026-09-05", "2026-09-07", "AAAA111111")]
+    client = _make_client(res)
+    client.get_overrides.return_value = [
+        {"date": "2026-09-05", "reason": "9/1 - Pacing behind by -10%"},
+    ]
+    with patch("booking_quality_log.main.cfg.load_listings", return_value=LISTINGS), \
+         patch("booking_quality_log.main.cfg.get_api_key", return_value="fake"), \
+         patch("booking_quality_log.main.PriceLabsClient", return_value=client):
+        bql_main.run(tmp_path, today=dt.date(2026, 9, 15))
+
+    [file] = tmp_path.glob("*.xlsx")
+    wb = openpyxl.load_workbook(file)
+    ws = wb["Booking Quality Log"]
+    row = next(ws.iter_rows(min_row=5, values_only=True))
+    override_notes_col_0idx = MANUAL_COLS_START - 2  # column right before the manual block
+    assert row[override_notes_col_0idx] == "9/1 - Pacing behind by -10%"

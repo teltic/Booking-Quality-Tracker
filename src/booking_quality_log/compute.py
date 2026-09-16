@@ -42,6 +42,8 @@ class BookingRow:
     target_adr_p75: float | str | None
     vs_target_dollar: float | str | None
     vs_target_pct: float | str | None
+    my_season_adr: str
+    vs_my_season_pct: float | str
     market_p25: float | None
     market_p90: float | None
     stly_adr: float | str
@@ -53,6 +55,7 @@ class BookingRow:
     gap_after_signal: str | None
     status: str
     reservation_id: str
+    override_notes: str
 
 
 def _stay_dates(check_in: dt.date, check_out: dt.date) -> list[dt.date]:
@@ -125,6 +128,59 @@ def _bw_vs_median(bw_days: int | None, median_bw: float | None) -> str:
     return "Typical"
 
 
+def _percentile(sorted_values: list[float], q: float) -> float:
+    n = len(sorted_values)
+    if n == 1:
+        return sorted_values[0]
+    idx = q * (n - 1)
+    lo, hi = int(idx), min(int(idx) + 1, n - 1)
+    frac = idx - lo
+    return sorted_values[lo] + (sorted_values[hi] - sorted_values[lo]) * frac
+
+
+MIN_SEASON_SAMPLE = 3
+
+
+def _my_season_band(
+    check_in: dt.date, stay_pattern: str, nightly_adr: dict[dt.date, float]
+) -> tuple[str, float | None]:
+    """This property's own historical ADR for the same calendar month and
+    day-category (weekend-anchored stays use Fri/Sat nights, midweek
+    stays use the rest), pooled across every year of history available --
+    the real anchor when the comp set's own pricing is too flat to lean
+    on (e.g. a comp that's just $300 weekday / $350 weekend year-round,
+    with no seasonality of its own).
+    """
+    month = check_in.month
+    want_weekend = stay_pattern == "Weekend-anchored"
+    values = sorted(
+        adr
+        for d, adr in nightly_adr.items()
+        if d.month == month and (d.weekday() in WEEKEND_DAYS) == want_weekend
+    )
+    if len(values) < MIN_SEASON_SAMPLE:
+        return "not enough data", None
+    median = _percentile(values, 0.5)
+    p25 = _percentile(values, 0.25)
+    p75 = _percentile(values, 0.75)
+    display = f"${median:,.0f} (${p25:,.0f}-${p75:,.0f}, n={len(values)})"
+    return display, median
+
+
+def _override_notes(stay_dates: list[dt.date], overrides_by_date: dict[dt.date, str]) -> str:
+    """Concatenates the PriceLabs override `reason` text (a dated note you
+    already type by hand when pushing pacing/LY-driven overrides, e.g.
+    "9/12 - Pacing behind by -15.79%") for any of this booking's stay
+    dates that still carry one -- free contextual color, not a metric.
+    """
+    seen = []
+    for d in stay_dates:
+        reason = overrides_by_date.get(d)
+        if reason and reason not in seen:
+            seen.append(reason)
+    return "; ".join(seen)
+
+
 def _stly_adr(stay_dates: list[dt.date], nightly_adr: dict[dt.date, float]) -> float | str:
     matched = []
     for d in stay_dates:
@@ -172,8 +228,10 @@ def _build_row(
     nightly_adr: dict[dt.date, float],
     median_bw: float | None,
     target_percentile_attr: str,
+    overrides_by_date: dict[dt.date, str],
 ) -> BookingRow:
     stay_dates = _stay_dates(r.check_in, r.check_out)
+    stay_pattern = _stay_pattern(r.check_in, r.check_out)
 
     target_p75 = _average_market(stay_dates, market, target_percentile_attr)
     market_p25 = _average_market(stay_dates, market, "p25")
@@ -187,6 +245,15 @@ def _build_row(
         vs_target_pct = round((r.adr - target_p75) / target_p75, 4) if target_p75 else NOT_APPLICABLE
         target_p75_display = round(target_p75, 2)
 
+    # Exclude this booking's own night(s) from the population it's being
+    # compared against -- otherwise a booking skews (and, with thin
+    # history, dominates) its own benchmark.
+    season_population = {d: v for d, v in nightly_adr.items() if d not in stay_dates}
+    my_season_display, my_season_median = _my_season_band(r.check_in, stay_pattern, season_population)
+    vs_my_season_pct: float | str = (
+        round((r.adr - my_season_median) / my_season_median, 4) if my_season_median else NOT_APPLICABLE
+    )
+
     avg_occupancy = _average_market(stay_dates, market, "occupancy")
     booking_window_days = (r.check_in - r.booked_date).days if r.booked_date else None
 
@@ -195,7 +262,7 @@ def _build_row(
         check_in=r.check_in,
         check_out=r.check_out,
         nights=r.nights,
-        stay_pattern=_stay_pattern(r.check_in, r.check_out),
+        stay_pattern=stay_pattern,
         one_night_stay=r.nights == 1,
         booked_date=r.booked_date,
         booking_window_days=booking_window_days,
@@ -206,6 +273,8 @@ def _build_row(
         target_adr_p75=target_p75_display,
         vs_target_dollar=vs_target_dollar,
         vs_target_pct=vs_target_pct,
+        my_season_adr=my_season_display,
+        vs_my_season_pct=vs_my_season_pct,
         market_p25=round(market_p25, 2) if market_p25 is not None else None,
         market_p90=round(market_p90, 2) if market_p90 is not None else None,
         stly_adr=_stly_adr(stay_dates, nightly_adr),
@@ -217,6 +286,7 @@ def _build_row(
         gap_after_signal=gap_after_signal,
         status=status,
         reservation_id=r.display_id,
+        override_notes=_override_notes(stay_dates, overrides_by_date),
     )
 
 
@@ -225,6 +295,7 @@ def build_booking_rows(
     all_reservations: list[Reservation],
     market: dict[dt.date, MarketDay],
     target_percentile_attr: str = "p75",
+    overrides_by_date: dict[dt.date, str] | None = None,
 ) -> list[BookingRow]:
     """Build one row per booking with check-in >= START_DATE, both
     confirmed and cancelled. `all_reservations` should include bookings
@@ -239,6 +310,7 @@ def build_booking_rows(
     it was cancelled isn't silently lost, and so a cancelled high- or
     low-ADR booking stays visible for review.
     """
+    overrides_by_date = overrides_by_date or {}
     confirmed = sorted([r for r in all_reservations if r.is_confirmed], key=lambda r: r.check_in)
     nightly_adr = nightly_adr_series(confirmed)
 
@@ -276,7 +348,7 @@ def build_booking_rows(
         rows.append(
             _build_row(
                 r, "Confirmed", gap_before_days, gap_before_signal, gap_after_days, gap_after_signal,
-                property_name, market, nightly_adr, median_bw, target_percentile_attr,
+                property_name, market, nightly_adr, median_bw, target_percentile_attr, overrides_by_date,
             )
         )
 
@@ -287,7 +359,7 @@ def build_booking_rows(
         rows.append(
             _build_row(
                 r, "Cancelled", CANCELLED_GAP_NOTE, None, CANCELLED_GAP_NOTE, None,
-                property_name, market, nightly_adr, median_bw, target_percentile_attr,
+                property_name, market, nightly_adr, median_bw, target_percentile_attr, overrides_by_date,
             )
         )
 

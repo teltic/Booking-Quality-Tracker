@@ -77,6 +77,15 @@ Each row carries:
   Premium tier, so the benchmark is the comp set's 75th-percentile price
   for the stay dates, not the median. Blank/"n/a" when PriceLabs has no
   comp-set data for those dates.
+- **My Season ADR (band) / vs My Season (%)** -- this property's OWN
+  historical ADR for the same calendar month + day-category (weekend vs.
+  midweek), pooled across every year of history available (excluding this
+  booking's own night, so it never skews its own benchmark). Exists
+  because a comp set can be too flat to lean on alone (e.g. one that's
+  just $300 weekday / $350 weekend year-round, with no real seasonality
+  of its own) -- when this and Target ADR (P75) disagree, that
+  disagreement is itself worth noticing. "not enough data" until this
+  property has 3+ historical nights in that same month + day-category.
 - **Market P25 / P90** -- extra context on how wide the comp set's
   pricing spread is on those dates.
 - **STLY ADR** -- your own actual ADR from the same calendar dates last
@@ -102,34 +111,54 @@ Each row carries:
   longer holds calendar space), so those show "n/a (cancelled)". A
   cancellation by itself never triggers a new file being written -- only
   a brand-new confirmed booking does.
+- **Override Notes (PriceLabs)** -- the `reason` text from any PriceLabs
+  date override covering this booking's stay dates -- the same dated
+  notes you already type by hand when pushing a pacing/LY-driven override
+  (e.g. "9/12 - Pacing behind by -15.79%"). Pulled in automatically as
+  context; blank if nothing with a reason covers these dates.
 
 Full plain-language descriptions are also in the workbook's own "Read Me"
 tab, which travels with every file you generate.
 
-### Manual note columns never get erased
+### The manual review block never gets erased
 
-Comp Check (Airbnb), Pacing Push %, LOS Discount, Final PL Check, and
-Notes/Verdict are hand-typed, never computed -- these need a human doing a
-competitor check on Airbnb.com and cross-referencing PriceLabs' own
-pacing/pickup views, which isn't reliably automatable (no public Airbnb
-API). A hidden **Reservation ID** column (PriceLabs' own channel
-confirmation code, e.g. an Airbnb code like `HMT5EBPQ54`) keys each row so
-that whenever a new file is written, any note you typed on a booking
-that's still in view -- including one that's since been cancelled -- is
-carried forward from the most recent prior file automatically. This
-lookup is done by each column's header text at read time (not a fixed
-column position), so it also survives a future column being added or a
-manual column being renamed.
+Eleven columns, all matched to each row by a hidden **Reservation ID**
+column (PriceLabs' own channel confirmation code, e.g. an Airbnb code
+like `HMT5EBPQ54`), so whenever a new file is written, everything you
+typed or picked on a booking that's still in view -- including one that's
+since been cancelled -- is carried forward from the most recent prior
+file automatically. This lookup is done by each column's header text at
+read time (not a fixed column position), so it also survives a future
+column being added or a manual column being renamed.
+
+Built for pattern-finding once there are 30-50+ rows, not just per-booking
+notes -- most of these are short **dropdowns** (a click, not typing) so
+they stay consistent enough to filter/pivot on, e.g. "how often did
+Primary Lever = LOS Discount coincide with Verdict = Win in Low demand
+months":
+
+| Column | Type | Notes |
+|---|---|---|
+| Comp Check (Airbnb) | free text | what you saw on a manual Airbnb.com search |
+| ADR vs Comp Rating | dropdown | Above Comp / At Comp / Below Comp / Comp Has No Real Strategy |
+| Demand-ADR Fit | dropdown | Great / OK / Underpriced / Overpriced -- given LY occ./Demand Tier, was the ADR right? |
+| Airbnb LOS Rule | dropdown | which of your named PriceLabs LOS discount rule sets was active (can't be auto-detected -- PriceLabs' API exposes none of seasonality/day-of-week/overrides/rate-plans by a rule-set name, checked live) |
+| LOS / Window Fit | dropdown | Ideal / Acceptable / Suboptimal -- did lead time and length of stay make sense together for the season? |
+| LOS Discount % (blended) | number | your own manual, revenue-weighted blend across the stay's nights (e.g. a 4-night stay with 1 night at 35% off blends to ~9%, not 35%) |
+| Primary Lever | dropdown | Price / Min Stay / LOS Discount / Pacing Push / Organic-Unclear -- what actually got this booked? |
+| Pacing Push % | number | the push % active when it booked |
+| Final PL Check | free text | your LY/2LY gut-check comparison |
+| Verdict | dropdown | Win / Loss / Neutral / Too Early to Tell |
+| Lesson Learned | free text | what this specific booking taught you |
 
 ## Known limitations / assumptions worth knowing before you trust this
 
 1. **PriceLabs API endpoints are the same ones verified live for the
-   sibling pricing tool** (`listing_prices`, `neighborhood_data`,
-   `overrides`, `reservation_data`) -- `overrides` isn't used by this
-   tool, but the other three are, via the same request shapes.
-   `get_listings` is unverified; if it ever 404s, `PriceLabsAPIError`
-   prints the failing URL and response body, and a wrong path is a
-   one-line fix in the `ENDPOINTS` dict in `pricelabs_client.py`.
+   sibling pricing tool** (`neighborhood_data`, `overrides`,
+   `reservation_data`), via the same request shapes. `get_listings` is
+   unverified; if it ever 404s, `PriceLabsAPIError` prints the failing URL
+   and response body, and a wrong path is a one-line fix in the
+   `ENDPOINTS` dict in `pricelabs_client.py`.
 
 2. **A comp-set split into multiple bedroom-count segments uses the
    largest one for percentiles.** Some listings' comp-set data comes back

@@ -10,11 +10,11 @@ Safe to rerun same-day: it reads the most recent prior dated file in
 `--output-dir`, compares its Reservation IDs against today's confirmed
 bookings, and only writes a new file when there's at least one Reservation
 ID today that wasn't already known (whether previously shown as confirmed
-or cancelled). Five manual note columns (Comp Check, Pacing Push %, LOS
-Discount, Final PL Check, Notes / Verdict) are carried forward from that
-same prior file, matched by Reservation ID, whenever a file is written --
-including for a booking that's since been cancelled, which stays visible
-(marked Cancelled) rather than dropping out of the log.
+or cancelled). Every manual review column (see workbook_build.MANUAL_COLUMNS)
+is carried forward from that same prior file, matched by Reservation ID,
+whenever a file is written -- including for a booking that's since been
+cancelled, which stays visible (marked Cancelled) rather than dropping out
+of the log.
 """
 
 from __future__ import annotations
@@ -31,7 +31,8 @@ from .pricelabs_client import PriceLabsAPIError, PriceLabsClient
 
 from .compute import START_DATE, build_booking_rows
 from .dated_output import dated_filename, find_most_recent_prior_file
-from .reservations import fetch_reservations
+from .overrides import parse_override_reasons
+from .reservations import FETCH_BACK_DAYS, FETCH_FORWARD_DAYS, fetch_reservations
 from .workbook_build import build_booking_quality_sheet, build_read_me_sheet, new_workbook
 from .workbook_state import load_prior_reservation_state
 
@@ -61,13 +62,22 @@ def run(
     else:
         logger.info("Carrying manual notes forward from %s", prior_path)
 
+    override_start = (today - dt.timedelta(days=FETCH_BACK_DAYS)).isoformat()
+    override_end = (today + dt.timedelta(days=FETCH_FORWARD_DAYS)).isoformat()
+
     all_rows = []
     for listing in listings:
         logger.info("Processing %s (%s / %s)", listing.name, listing.pms, listing.listing_id)
         reservations = fetch_reservations(client, listing.pms, listing.listing_id, today)
         raw_market = client.get_neighborhood_data(listing.listing_id, listing.pms)
         market, _compset = parse_market_data(raw_market)
-        all_rows.extend(build_booking_rows(listing.name, reservations, market))
+        raw_overrides = client.get_overrides(
+            listing.listing_id, listing.pms, start_date=override_start, end_date=override_end
+        )
+        overrides_by_date = parse_override_reasons(raw_overrides)
+        all_rows.extend(
+            build_booking_rows(listing.name, reservations, market, overrides_by_date=overrides_by_date)
+        )
 
     # Newest-booked first (column "Booked" = the date the reservation was
     # made, not check-in) -- rows with no booked_date sort to the bottom.

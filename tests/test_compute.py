@@ -226,3 +226,65 @@ def test_cancelled_booking_still_computed_target_adr_and_demand_tier():
     row = build_booking_rows("Test Property", res, market)[0]
     assert row.target_adr_p75 == 380
     assert row.demand_tier == "High"
+
+
+def test_my_season_adr_not_enough_data_with_thin_history():
+    res = [_res("r1", dt.date(2026, 9, 5), dt.date(2026, 9, 6), 400, 400, dt.date(2026, 8, 20), "A1")]
+    row = build_booking_rows("Test Property", res, {})[0]
+    assert row.my_season_adr == "not enough data"
+    assert row.vs_my_season_pct == "n/a"
+
+
+def test_my_season_adr_pools_same_month_and_day_category_across_years():
+    # Three prior Saturdays in September (2023-2025), all weekend-anchored
+    # like the booking under test -- enough history for a band.
+    res = [
+        _res("ly1", dt.date(2023, 9, 2), dt.date(2023, 9, 3), 280, 280, dt.date(2023, 8, 1), "LY1"),
+        _res("ly2", dt.date(2024, 9, 7), dt.date(2024, 9, 8), 300, 300, dt.date(2024, 8, 1), "LY2"),
+        _res("ly3", dt.date(2025, 9, 6), dt.date(2025, 9, 7), 320, 320, dt.date(2025, 8, 1), "LY3"),
+        _res("r1", dt.date(2026, 9, 5), dt.date(2026, 9, 6), 400, 400, dt.date(2026, 8, 20), "A1"),  # Saturday
+    ]
+    row = build_booking_rows("Test Property", res, {})[0]
+    assert "not enough data" not in row.my_season_adr
+    assert "n=3" in row.my_season_adr
+    # median of 280/300/320 is 300 -> this booking's $400 is +33.3% vs season
+    assert row.vs_my_season_pct == round((400 - 300) / 300, 4)
+
+
+def test_my_season_adr_only_pools_matching_day_category():
+    # A midweek historical night in the same month must NOT count toward a
+    # weekend-anchored booking's season band, and vice versa.
+    res = [
+        _res("ly1", dt.date(2025, 9, 2), dt.date(2025, 9, 3), 200, 200, dt.date(2025, 8, 1), "LY1"),  # Tue, midweek
+        _res("ly2", dt.date(2025, 9, 9), dt.date(2025, 9, 10), 210, 210, dt.date(2025, 8, 1), "LY2"),  # Tue, midweek
+        _res("ly3", dt.date(2025, 9, 16), dt.date(2025, 9, 17), 220, 220, dt.date(2025, 8, 1), "LY3"),  # Tue, midweek
+        _res("r1", dt.date(2026, 9, 5), dt.date(2026, 9, 6), 400, 400, dt.date(2026, 8, 20), "A1"),  # Saturday
+    ]
+    row = build_booking_rows("Test Property", res, {})[0]
+    assert row.my_season_adr == "not enough data"
+
+
+def test_override_notes_pulled_for_stay_dates():
+    res = [_res("r1", dt.date(2026, 9, 5), dt.date(2026, 9, 7), 400, 800, dt.date(2026, 8, 20), "A1")]
+    overrides_by_date = {
+        dt.date(2026, 9, 5): "9/1 - Pacing behind by -10%",
+        dt.date(2026, 9, 6): "9/1 - LY below 30%",
+    }
+    row = build_booking_rows("Test Property", res, {}, overrides_by_date=overrides_by_date)[0]
+    assert row.override_notes == "9/1 - Pacing behind by -10%; 9/1 - LY below 30%"
+
+
+def test_override_notes_empty_when_none_active():
+    res = [_res("r1", dt.date(2026, 9, 5), dt.date(2026, 9, 6), 400, 400, dt.date(2026, 8, 20), "A1")]
+    row = build_booking_rows("Test Property", res, {})[0]
+    assert row.override_notes == ""
+
+
+def test_override_notes_dedups_repeated_reason():
+    res = [_res("r1", dt.date(2026, 9, 5), dt.date(2026, 9, 7), 400, 800, dt.date(2026, 8, 20), "A1")]
+    overrides_by_date = {
+        dt.date(2026, 9, 5): "9/1 - Pacing behind by -10%",
+        dt.date(2026, 9, 6): "9/1 - Pacing behind by -10%",
+    }
+    row = build_booking_rows("Test Property", res, {}, overrides_by_date=overrides_by_date)[0]
+    assert row.override_notes == "9/1 - Pacing behind by -10%"

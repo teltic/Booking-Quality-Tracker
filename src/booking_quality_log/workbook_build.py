@@ -2,7 +2,11 @@
 
 Column order, widths, number formats and conditional-formatting colors are
 reproduced from the original hand-built prototype workbook so a rerun looks
-like the same tool, just automated.
+like the same tool, just automated -- with a much deeper manual-review
+block (see MANUAL_COLUMNS) added afterward at Thomas's request, aimed at
+building up enough structured, rateable data points across many bookings
+to start finding real pricing/LOS-discount/pacing-push patterns rather
+than one-off notes.
 """
 
 from __future__ import annotations
@@ -13,6 +17,7 @@ from openpyxl import Workbook
 from openpyxl.formatting.rule import FormulaRule
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.worksheet.worksheet import Worksheet
 
 from .compute import BookingRow
@@ -55,11 +60,15 @@ HEADERS = [
     "Property", "Check-in", "In Day", "Check-out", "Out Day", "Nights",
     "Stay Pattern", "1-Night\nStay", "Booked", "Booking\nWindow (d)",
     "BW vs\nMedian", "My ADR", "My Revenue", "Source", "Target ADR\n(P75)",
-    "vs Target\n($)", "vs Target\n(%)", "Market\nP25", "Market\nP90",
-    "STLY ADR\n(same dates)", "LY occ.\n(per night)", "Demand Tier\n(stay dates)",
-    "Gap Before\n(d)", "Gap Before Signal", "Gap After\n(d)", "Gap After Signal",
-    "Status", "Reservation ID", "Comp Check (Airbnb)",
-    "Pacing Push %", "LOS Discount", "Final PL Check", "Notes / Verdict",
+    "vs Target\n($)", "vs Target\n(%)", "My Season ADR\n(band)", "vs My\nSeason (%)",
+    "Market\nP25", "Market\nP90", "STLY ADR\n(same dates)", "LY occ.\n(per night)",
+    "Demand Tier\n(stay dates)", "Gap Before\n(d)", "Gap Before Signal",
+    "Gap After\n(d)", "Gap After Signal", "Status", "Reservation ID",
+    "Override Notes\n(PriceLabs)",
+    "Comp Check (Airbnb)", "ADR vs Comp Rating", "Demand-ADR Fit",
+    "Airbnb LOS Rule", "LOS / Window Fit", "LOS Discount % (blended)",
+    "Primary Lever", "Pacing Push %", "Final PL Check", "Verdict",
+    "Lesson Learned",
 ]
 
 # Column numbers (1-indexed) for every column referenced by name below --
@@ -71,33 +80,68 @@ COL_ONE_NIGHT_STAY = 8
 COL_TARGET_ADR = 15
 COL_VS_TARGET_DOLLAR = 16
 COL_VS_TARGET_PCT = 17
-COL_GAP_BEFORE_SIGNAL = 24
-COL_GAP_AFTER_SIGNAL = 26
-STATUS_COL = 27
-RESERVATION_ID_COL = 28
-MANUAL_COLS_START = 29
-MANUAL_COLS_COUNT = 5
+COL_MY_SEASON_ADR = 18
+COL_VS_MY_SEASON_PCT = 19
+COL_MARKET_P25 = 20
+COL_MARKET_P90 = 21
+COL_GAP_BEFORE_SIGNAL = 26
+COL_GAP_AFTER_SIGNAL = 28
+STATUS_COL = 29
+RESERVATION_ID_COL = 30
+COL_OVERRIDE_NOTES = 31
+MANUAL_COLS_START = 32
+MANUAL_COLS_COUNT = 11
 
 assert len(HEADERS) == MANUAL_COLS_START - 1 + MANUAL_COLS_COUNT
 
 HIDDEN_COLUMNS = {get_column_letter(RESERVATION_ID_COL)}
 
-MANUAL_COLUMNS = [
-    "Comp Check (Airbnb)", "Pacing Push %",
-    "LOS Discount", "Final PL Check", "Notes / Verdict",
+# In MANUAL_COLS_START order. Each entry is (header text, kind, options-or-None).
+# kind: "text" (free-typed), "number" (plain number, manual), or "dropdown"
+# (Excel data-validation list -- a click instead of typing, kept consistent
+# for pivoting/filtering once there are enough rows to look for patterns).
+MANUAL_FIELDS = [
+    ("Comp Check (Airbnb)", "text", None),
+    ("ADR vs Comp Rating", "dropdown", ["Above Comp", "At Comp", "Below Comp", "Comp Has No Real Strategy"]),
+    ("Demand-ADR Fit", "dropdown", ["Great", "OK", "Underpriced", "Overpriced"]),
+    ("Airbnb LOS Rule", "dropdown", ["Sun-Wed Aggressive", "Sun-Wed Minimal", "Sun-Wed Moderate", "None Active"]),
+    ("LOS / Window Fit", "dropdown", ["Ideal", "Acceptable", "Suboptimal"]),
+    ("LOS Discount % (blended)", "number", None),
+    ("Primary Lever", "dropdown", ["Price", "Min Stay", "LOS Discount", "Pacing Push", "Organic-Unclear"]),
+    ("Pacing Push %", "number", None),
+    ("Final PL Check", "text", None),
+    ("Verdict", "dropdown", ["Win", "Loss", "Neutral", "Too Early to Tell"]),
+    ("Lesson Learned", "text", None),
 ]
+assert len(MANUAL_FIELDS) == MANUAL_COLS_COUNT
+assert [f[0] for f in MANUAL_FIELDS] == HEADERS[MANUAL_COLS_START - 1 :]
+
+MANUAL_COLUMNS = [name for name, _kind, _options in MANUAL_FIELDS]
+
+# Manual numeric fields get a "9.0%" *display suffix* rather than Excel's
+# true "0.0%" percentage format -- a real percentage format multiplies the
+# stored value by 100 for display, so typing a plain "9" (meaning 9%)
+# would show as "900%" unless you remember to type 0.09 instead. This
+# keeps typing "9" showing "9.0%" with no gotcha.
+MANUAL_PERCENT_SUFFIX_COLS = {
+    MANUAL_COLS_START + i for i, (_name, kind, _opts) in enumerate(MANUAL_FIELDS)
+    if kind == "number"
+}
 
 DATE_COLS = {2, 4}  # Check-in, Check-out
-MONEY_COLS = {12, 13, 15, 16, 18, 19}  # My ADR/Revenue, Target ADR, vs Target $, Market P25/P90
+MONEY_COLS = {12, 13, 15, 16, COL_MARKET_P25, COL_MARKET_P90}  # dollar-formatted numeric columns
+PCT_COLS = {COL_VS_TARGET_PCT, COL_VS_MY_SEASON_PCT}  # true fractional percentages (0.05 = 5%)
 HEADER_ROW = 4
 FIRST_DATA_ROW = 5
 
 COLUMN_WIDTHS_BY_NUMBER = {
     1: 22, 2: 10, 3: 6, 4: 10, 5: 6, 7: 13, 8: 7, 9: 10, 10: 8, 11: 9,
-    12: 8, 13: 9, 17: 8, 20: 10, 21: 16, 23: 8, 24: 26, 25: 8, 26: 26,
-    STATUS_COL: 12, RESERVATION_ID_COL: 14, MANUAL_COLS_START: 24,
-    MANUAL_COLS_START + 1: 16, MANUAL_COLS_START + 2: 16,
-    MANUAL_COLS_START + 3: 20, MANUAL_COLS_START + 4: 26,
+    12: 8, 13: 9, 17: 8, 18: 22, 19: 8, 22: 10, 23: 16, 25: 8, 26: 26,
+    27: 8, 28: 26, STATUS_COL: 12, RESERVATION_ID_COL: 14,
+    COL_OVERRIDE_NOTES: 26, MANUAL_COLS_START: 24, MANUAL_COLS_START + 1: 22,
+    MANUAL_COLS_START + 2: 16, MANUAL_COLS_START + 3: 20, MANUAL_COLS_START + 4: 16,
+    MANUAL_COLS_START + 5: 14, MANUAL_COLS_START + 6: 16, MANUAL_COLS_START + 7: 12,
+    MANUAL_COLS_START + 8: 20, MANUAL_COLS_START + 9: 16, MANUAL_COLS_START + 10: 28,
 }
 COLUMN_WIDTHS = {get_column_letter(n): w for n, w in COLUMN_WIDTHS_BY_NUMBER.items()}
 
@@ -121,8 +165,9 @@ def build_booking_quality_sheet(
     display_start_date: dt.date,
     manual_notes: dict[str, tuple] | None = None,
 ) -> None:
-    """`manual_notes` maps Reservation ID -> tuple of the 6 manual-column
-    values, carried forward from a prior run (see workbook_state.py).
+    """`manual_notes` maps Reservation ID -> tuple of MANUAL_COLUMNS values
+    (same order as MANUAL_FIELDS), carried forward from a prior run (see
+    workbook_state.py).
     """
     manual_notes = manual_notes or {}
     ws = wb.create_sheet(SHEET_NAME)
@@ -165,30 +210,37 @@ def build_booking_quality_sheet(
         ws.cell(row=r, column=15, value=row.target_adr_p75)
         ws.cell(row=r, column=16, value=row.vs_target_dollar)
         ws.cell(row=r, column=17, value=row.vs_target_pct)
-        ws.cell(row=r, column=18, value=row.market_p25)
-        ws.cell(row=r, column=19, value=row.market_p90)
-        ws.cell(row=r, column=20, value=row.stly_adr)
-        ws.cell(row=r, column=21, value=row.ly_occ)
-        ws.cell(row=r, column=22, value=row.demand_tier)
-        ws.cell(row=r, column=23, value=row.gap_before_days)
+        ws.cell(row=r, column=COL_MY_SEASON_ADR, value=row.my_season_adr)
+        ws.cell(row=r, column=COL_VS_MY_SEASON_PCT, value=row.vs_my_season_pct)
+        ws.cell(row=r, column=COL_MARKET_P25, value=row.market_p25)
+        ws.cell(row=r, column=COL_MARKET_P90, value=row.market_p90)
+        ws.cell(row=r, column=22, value=row.stly_adr)
+        ws.cell(row=r, column=23, value=row.ly_occ)
+        ws.cell(row=r, column=24, value=row.demand_tier)
+        ws.cell(row=r, column=25, value=row.gap_before_days)
         ws.cell(row=r, column=COL_GAP_BEFORE_SIGNAL, value=row.gap_before_signal)
-        ws.cell(row=r, column=25, value=row.gap_after_days)
+        ws.cell(row=r, column=27, value=row.gap_after_days)
         ws.cell(row=r, column=COL_GAP_AFTER_SIGNAL, value=row.gap_after_signal)
         ws.cell(row=r, column=STATUS_COL, value=row.status)
         ws.cell(row=r, column=RESERVATION_ID_COL, value=row.reservation_id)
+        ws.cell(row=r, column=COL_OVERRIDE_NOTES, value=row.override_notes)
 
         saved = manual_notes.get(row.reservation_id)
         for offset in range(MANUAL_COLS_COUNT):
             value = saved[offset] if saved else None
-            ws.cell(row=r, column=MANUAL_COLS_START + offset, value=value)
+            col = MANUAL_COLS_START + offset
+            ws.cell(row=r, column=col, value=value)
+            if col in MANUAL_PERCENT_SUFFIX_COLS:
+                ws.cell(row=r, column=col).number_format = '0.0"%"'
 
         for col in MONEY_COLS:
             cell = ws.cell(row=r, column=col)
             if cell.value not in (None, "", "n/a"):
                 cell.number_format = '$#,##0.00;("$"#,##0.00);\\-'
-        pct_cell = ws.cell(row=r, column=17)
-        if isinstance(pct_cell.value, (int, float)):
-            pct_cell.number_format = "0.0%"
+        for col in PCT_COLS:
+            cell = ws.cell(row=r, column=col)
+            if isinstance(cell.value, (int, float)):
+                cell.number_format = "0.0%"
 
     last_row = len(rows) + FIRST_DATA_ROW - 1
     for letter, width in COLUMN_WIDTHS.items():
@@ -205,6 +257,22 @@ def build_booking_quality_sheet(
         def col_range(col_num: int) -> str:
             letter = col_letter(col_num)
             return f"{letter}{r0}:{letter}{last_row}"
+
+        # Dropdown data validation for every "dropdown"-kind manual field --
+        # a click instead of typing, and it keeps values consistent enough
+        # to pivot/filter once there are enough rows to look for patterns.
+        for i, (_name, kind, options) in enumerate(MANUAL_FIELDS):
+            if kind != "dropdown":
+                continue
+            col = MANUAL_COLS_START + i
+            dv = DataValidation(
+                type="list",
+                formula1='"' + ",".join(options) + '"',
+                allow_blank=True,
+                showDropDown=False,  # openpyxl quirk: False is what actually shows the arrow
+            )
+            ws.add_data_validation(dv)
+            dv.add(col_range(col))
 
         target_adr_letter = col_letter(COL_TARGET_ADR)
         vs_target_dollar_letter = col_letter(COL_VS_TARGET_DOLLAR)
@@ -286,6 +354,18 @@ READ_ME_LINES = [
         False,
     ),
     ("", False),
+    ("My Season ADR (band)", True),
+    (
+        "This property's OWN historical ADR for the same calendar month and day-category "
+        "(weekend-anchored vs. midweek), pooled across every year of history available. "
+        "This exists because a comp set can be too flat to lean on alone (e.g. a comp "
+        "that's just $300 weekday / $350 weekend year-round with no real seasonality of "
+        "its own) -- when Target ADR (P75) and My Season ADR disagree, that disagreement "
+        "is itself worth noticing. Shows 'not enough data' until this property has at "
+        "least 3 historical nights in that same month + day-category.",
+        False,
+    ),
+    ("", False),
     ("Market P25 / P90", True),
     ("Shown for extra context — how wide the comp set's pricing spread is on those dates.", False),
     ("", False),
@@ -357,13 +437,27 @@ READ_ME_LINES = [
         False,
     ),
     ("", False),
-    ("Manual note columns", True),
+    ("Override Notes (PriceLabs)", True),
     (
-        "Comp Check (Airbnb), Pacing Push %, LOS Discount, Final PL Check, and "
-        "Notes/Verdict are blank on purpose — type your own findings in as you review, "
-        "the same way you already do it by hand. They're matched to each row by a hidden "
-        "Reservation ID column, so a refresh won't wipe out what you've typed — it "
-        "carries notes forward for any booking still in view.",
+        "The `reason` text from any active PriceLabs date override on this booking's "
+        "stay dates -- the same dated notes you already type by hand when pushing a "
+        "pacing/LY-driven override (e.g. '9/12 - Pacing behind by -15.79%'). Pulled in "
+        "automatically as context; blank if no override with a reason covers these dates.",
+        False,
+    ),
+    ("", False),
+    ("Manual review columns", True),
+    (
+        "Comp Check (Airbnb), Final PL Check, and Lesson Learned are free-typed. "
+        "ADR vs Comp Rating, Demand-ADR Fit, Airbnb LOS Rule, LOS / Window Fit, Primary "
+        "Lever, and Verdict are dropdowns (click, don't type) -- kept as short, "
+        "consistent categories on purpose, since a countable rating is what turns into a "
+        "real clue once you have 30-50 rows (e.g. 'Primary Lever = LOS Discount' + "
+        "'Verdict = Win' happening 8 times in Low demand tells you something concrete). "
+        "LOS Discount % (blended) and Pacing Push % are typed numbers. Every one of "
+        "these is matched to each row by a hidden Reservation ID column, so a refresh "
+        "never wipes out what you've typed -- it carries every column forward for any "
+        "booking still in view, including one that's since been cancelled.",
         False,
     ),
     ("", False),
