@@ -6,6 +6,7 @@ import openpyxl
 from booking_quality_log.compute import BookingRow
 from booking_quality_log.workbook_build import (
     MANUAL_COLS_COUNT,
+    MANUAL_COLS_START,
     MANUAL_COLUMNS,
     build_booking_quality_sheet,
     new_workbook,
@@ -19,6 +20,7 @@ def _row(res_id):
         check_in=dt.date(2026, 9, 5),
         check_out=dt.date(2026, 9, 7),
         nights=2,
+        guest_count=4,
         stay_pattern="Weekend-anchored",
         one_night_stay=False,
         booked_date=dt.date(2026, 8, 20),
@@ -51,7 +53,6 @@ def _row(res_id):
 # within the manual block, used below instead of hardcoding column numbers.
 COMP_CHECK_OFFSET = MANUAL_COLUMNS.index("Comp Check (Airbnb)")
 LESSON_LEARNED_OFFSET = MANUAL_COLUMNS.index("Lesson Learned")
-MANUAL_COLS_START = 32  # keep in sync with workbook_build.MANUAL_COLS_START
 
 
 def test_missing_file_returns_empty_dict(tmp_path):

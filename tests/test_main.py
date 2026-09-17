@@ -5,7 +5,12 @@ import openpyxl
 
 from booking_quality_log import main as bql_main
 from booking_quality_log.config import Listing
-from booking_quality_log.workbook_build import MANUAL_COLS_START, MANUAL_COLUMNS
+from booking_quality_log.workbook_build import (
+    MANUAL_COLS_START,
+    MANUAL_COLUMNS,
+    RESERVATION_ID_COL,
+    STATUS_COL,
+)
 
 FAKE_MARKET = {
     "Neighborhood Data Source": "Market Dashboard: test comp",
@@ -33,8 +38,8 @@ LISTINGS = [
     Listing(name="Test Property", pms="testpms", listing_id="id-1")
 ]
 
-RESERVATION_ID_COL_0IDX = 29  # AD
-STATUS_COL_0IDX = 28  # AC
+RESERVATION_ID_COL_0IDX = RESERVATION_ID_COL - 1
+STATUS_COL_0IDX = STATUS_COL - 1
 COMP_CHECK_COL_0IDX = MANUAL_COLS_START - 1 + MANUAL_COLUMNS.index("Comp Check (Airbnb)")
 FINAL_PL_CHECK_COL_0IDX = MANUAL_COLS_START - 1 + MANUAL_COLUMNS.index("Final PL Check")
 

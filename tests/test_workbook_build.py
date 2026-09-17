@@ -2,14 +2,21 @@ import datetime as dt
 
 from booking_quality_log.compute import BookingRow
 from booking_quality_log.workbook_build import (
+    COL_GUESTS,
+    COL_MY_SEASON_ADR,
+    COL_OVERRIDE_NOTES,
+    COL_VS_MY_SEASON_PCT,
     FIRST_DATA_ROW,
     HEADER_ROW,
     HEADERS,
     HIDDEN_COLUMNS,
     MANUAL_COLS_COUNT,
+    MANUAL_COLS_START,
     MANUAL_COLUMNS,
     MANUAL_FIELDS,
+    RESERVATION_ID_COL,
     SHEET_NAME,
+    STATUS_COL,
     build_booking_quality_sheet,
     build_read_me_sheet,
     new_workbook,
@@ -22,6 +29,7 @@ def _row(res_id, checkin=dt.date(2026, 9, 5)):
         check_in=checkin,
         check_out=checkin + dt.timedelta(days=2),
         nights=2,
+        guest_count=6,
         stay_pattern="Weekend-anchored",
         one_night_stay=False,
         booked_date=checkin - dt.timedelta(days=10),
@@ -57,21 +65,23 @@ def test_sheet_structure_matches_layout():
 
     header_values = [c.value for c in ws[HEADER_ROW]]
     assert header_values == HEADERS
-    assert len(HEADERS) == 42  # A..AP
+    assert len(HEADERS) == 43  # A..AQ
+    assert "Guests" in HEADERS
     assert "Status" in HEADERS
     assert "Reservation ID" in HEADERS
     assert MANUAL_COLS_COUNT == 11
 
-    assert ws.column_dimensions["AD"].hidden is True
-    assert HIDDEN_COLUMNS == {"AD"}
+    hidden_letter = HIDDEN_COLUMNS.copy().pop()
+    assert ws.column_dimensions[hidden_letter].hidden is True
 
     data_row = ws[FIRST_DATA_ROW]
     assert data_row[0].value == "Test Property"
-    assert data_row[17].value == "$310 ($295-$340, n=4)"  # R: My Season ADR
-    assert abs(data_row[18].value - 0.29) < 1e-9  # S: vs My Season (%)
-    assert data_row[28].value == "Confirmed"  # AC: Status
-    assert data_row[29].value == "AAA111"  # AD: Reservation ID
-    assert data_row[30].value == "9/1 - Pacing behind by -10%"  # AE: Override Notes
+    assert data_row[COL_GUESTS - 1].value == 6
+    assert data_row[COL_MY_SEASON_ADR - 1].value == "$310 ($295-$340, n=4)"
+    assert abs(data_row[COL_VS_MY_SEASON_PCT - 1].value - 0.29) < 1e-9
+    assert data_row[STATUS_COL - 1].value == "Confirmed"
+    assert data_row[RESERVATION_ID_COL - 1].value == "AAA111"
+    assert data_row[COL_OVERRIDE_NOTES - 1].value == "9/1 - Pacing behind by -10%"
 
 
 def test_manual_notes_carried_forward_by_reservation_id():
@@ -80,7 +90,7 @@ def test_manual_notes_carried_forward_by_reservation_id():
     build_booking_quality_sheet(wb, [_row("AAA111")], dt.date(2026, 9, 1), manual_notes=prior_notes)
     ws = wb[SHEET_NAME]
     row = ws[FIRST_DATA_ROW]
-    manual_values = [c.value for c in row[31 : 31 + MANUAL_COLS_COUNT]]
+    manual_values = [c.value for c in row[MANUAL_COLS_START - 1 : MANUAL_COLS_START - 1 + MANUAL_COLS_COUNT]]
     assert manual_values == list(prior_notes["AAA111"])
 
 
@@ -92,7 +102,7 @@ def test_manual_notes_blank_for_a_row_with_no_prior_match():
     )
     ws = wb[SHEET_NAME]
     row = ws[FIRST_DATA_ROW]
-    manual_values = [c.value for c in row[31 : 31 + MANUAL_COLS_COUNT]]
+    manual_values = [c.value for c in row[MANUAL_COLS_START - 1 : MANUAL_COLS_START - 1 + MANUAL_COLS_COUNT]]
     assert manual_values == [None] * MANUAL_COLS_COUNT
 
 
@@ -120,7 +130,7 @@ def test_dropdown_validation_added_for_each_dropdown_field():
     )
     assert "Too Early to Tell" in verdict_dv.formula1
     # Applied to both data rows, not just the header or a single cell.
-    assert any(str(cr).startswith("AO5") for cr in verdict_dv.sqref.ranges) or "AO5:AO6" in str(verdict_dv.sqref)
+    assert f"{FIRST_DATA_ROW}:" in str(verdict_dv.sqref) or f"{FIRST_DATA_ROW + 1}" in str(verdict_dv.sqref)
 
 
 def test_cancelled_row_is_grayed_out_and_shows_status():
@@ -132,7 +142,7 @@ def test_cancelled_row_is_grayed_out_and_shows_status():
     build_booking_quality_sheet(wb, [row], dt.date(2026, 9, 1))
     ws = wb[SHEET_NAME]
     data_row = ws[FIRST_DATA_ROW]
-    assert data_row[28].value == "Cancelled"
+    assert data_row[STATUS_COL - 1].value == "Cancelled"
 
 
 def test_ly_occ_column_present_and_computed():
@@ -140,16 +150,17 @@ def test_ly_occ_column_present_and_computed():
     build_booking_quality_sheet(wb, [_row("AAA111")], dt.date(2026, 9, 1))
     ws = wb[SHEET_NAME]
     assert "LY occ.\n(per night)" in HEADERS
+    ly_occ_idx = HEADERS.index("LY occ.\n(per night)")
     data_row = ws[FIRST_DATA_ROW]
-    assert data_row[22].value == "20%, 65%"  # W: LY occ. (per night)
+    assert data_row[ly_occ_idx].value == "20%, 65%"
 
 
 def test_manual_percent_fields_get_display_suffix_not_true_percent_format():
     wb = new_workbook()
     build_booking_quality_sheet(wb, [_row("AAA111")], dt.date(2026, 9, 1))
     ws = wb[SHEET_NAME]
-    los_discount_col = 31 + MANUAL_COLUMNS.index("LOS Discount % (blended)") + 1
-    pacing_push_col = 31 + MANUAL_COLUMNS.index("Pacing Push %") + 1
+    los_discount_col = MANUAL_COLS_START + MANUAL_COLUMNS.index("LOS Discount % (blended)")
+    pacing_push_col = MANUAL_COLS_START + MANUAL_COLUMNS.index("Pacing Push %")
     assert ws.cell(row=FIRST_DATA_ROW, column=los_discount_col).number_format == '0.0"%"'
     assert ws.cell(row=FIRST_DATA_ROW, column=pacing_push_col).number_format == '0.0"%"'
 

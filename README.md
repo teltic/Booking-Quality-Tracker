@@ -71,9 +71,10 @@ time passes), sorted by **Booked date, newest first** (not by check-in).
 
 Each row carries:
 
-- **Nights / Stay Pattern / 1-Night Stay** -- "Weekend-anchored" if the
-  stay includes a Friday or Saturday night, else "Midweek"; 1-Night Stay
-  flags a single-night booking regardless of anything else.
+- **Nights / Guests / Stay Pattern / 1-Night Stay** -- Guests is party
+  size, straight from PriceLabs. "Weekend-anchored" if the stay includes a
+  Friday or Saturday night, else "Midweek"; 1-Night Stay flags a
+  single-night booking regardless of anything else.
 - **Booking Window / BW vs Median** -- lead time (booked date to
   check-in) vs. that property's own median lead time across all its
   bookings. "Far out" = booked well ahead of typical; "Last-minute" =

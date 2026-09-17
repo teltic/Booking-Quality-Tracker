@@ -38,6 +38,7 @@ class Reservation:
     booking_channel: str
     booking_status: str
     confirmation_code: str = ""
+    guest_count: int | None = None
 
     @property
     def is_confirmed(self) -> bool:
@@ -63,6 +64,16 @@ def _parse_date(s: str | None) -> dt.date | None:
     return dt.date.fromisoformat(s[:10])
 
 
+def _parse_guest_count(row: dict) -> int | None:
+    raw = row.get("guest_count")
+    if raw is None or raw == "":
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
+
+
 def _from_api_rows(rows: list[dict]) -> list[Reservation]:
     out = []
     for row in rows:
@@ -84,6 +95,7 @@ def _from_api_rows(rows: list[dict]) -> list[Reservation]:
                     booking_channel=row.get("booking_channel", "") or "",
                     booking_status=row.get("booking_status", ""),
                     confirmation_code=str(row.get("channelConfirmationCode", "") or ""),
+                    guest_count=_parse_guest_count(row),
                 )
             )
         except (KeyError, ValueError, TypeError):

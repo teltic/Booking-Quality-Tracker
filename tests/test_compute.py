@@ -10,7 +10,7 @@ from booking_quality_log.reservations import Reservation
 from booking_quality_log.market import MarketDay
 
 
-def _res(res_id, check_in, check_out, adr, revenue, booked_date, confirmation_code, status="booked"):
+def _res(res_id, check_in, check_out, adr, revenue, booked_date, confirmation_code, status="booked", guest_count=None):
     return Reservation(
         reservation_id=res_id,
         listing_name="Test Property",
@@ -22,6 +22,7 @@ def _res(res_id, check_in, check_out, adr, revenue, booked_date, confirmation_co
         booking_channel="airbnb",
         booking_status=status,
         confirmation_code=confirmation_code,
+        guest_count=guest_count,
     )
 
 
@@ -288,3 +289,15 @@ def test_override_notes_dedups_repeated_reason():
     }
     row = build_booking_rows("Test Property", res, {}, overrides_by_date=overrides_by_date)[0]
     assert row.override_notes == "9/1 - Pacing behind by -10%"
+
+
+def test_guest_count_flows_through_to_row():
+    res = [_res("r1", dt.date(2026, 9, 5), dt.date(2026, 9, 6), 400, 400, dt.date(2026, 8, 20), "A1", guest_count=7)]
+    row = build_booking_rows("Test Property", res, {})[0]
+    assert row.guest_count == 7
+
+
+def test_guest_count_none_when_not_provided():
+    res = [_res("r1", dt.date(2026, 9, 5), dt.date(2026, 9, 6), 400, 400, dt.date(2026, 8, 20), "A1")]
+    row = build_booking_rows("Test Property", res, {})[0]
+    assert row.guest_count is None

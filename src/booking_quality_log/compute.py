@@ -31,6 +31,7 @@ class BookingRow:
     check_in: dt.date
     check_out: dt.date
     nights: int
+    guest_count: int | None
     stay_pattern: str
     one_night_stay: bool
     booked_date: dt.date | None
@@ -262,6 +263,7 @@ def _build_row(
         check_in=r.check_in,
         check_out=r.check_out,
         nights=r.nights,
+        guest_count=r.guest_count,
         stay_pattern=stay_pattern,
         one_night_stay=r.nights == 1,
         booked_date=r.booked_date,

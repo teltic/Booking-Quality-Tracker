@@ -57,7 +57,7 @@ FILL_LOS_DISCOUNT = PatternFill(bgColor="FFD9E9F2")  # Gap signal: LOS-discount
 FILL_CANCELLED = PatternFill(bgColor="FFE7E6E6")  # Status = Cancelled (whole row grayed out)
 
 HEADERS = [
-    "Property", "Check-in", "In Day", "Check-out", "Out Day", "Nights",
+    "Property", "Check-in", "In Day", "Check-out", "Out Day", "Nights", "Guests",
     "Stay Pattern", "1-Night\nStay", "Booked", "Booking\nWindow (d)",
     "BW vs\nMedian", "My ADR", "My Revenue", "Source", "Target ADR\n(P75)",
     "vs Target\n($)", "vs Target\n(%)", "My Season ADR\n(band)", "vs My\nSeason (%)",
@@ -75,21 +75,22 @@ HEADERS = [
 # defined once here, letters derived with get_column_letter(), so a future
 # column insertion/removal only ever means editing HEADERS + this block,
 # never hunting down hardcoded letter strings scattered through formulas.
-COL_STAY_PATTERN = 7
-COL_ONE_NIGHT_STAY = 8
-COL_TARGET_ADR = 15
-COL_VS_TARGET_DOLLAR = 16
-COL_VS_TARGET_PCT = 17
-COL_MY_SEASON_ADR = 18
-COL_VS_MY_SEASON_PCT = 19
-COL_MARKET_P25 = 20
-COL_MARKET_P90 = 21
-COL_GAP_BEFORE_SIGNAL = 26
-COL_GAP_AFTER_SIGNAL = 28
-STATUS_COL = 29
-RESERVATION_ID_COL = 30
-COL_OVERRIDE_NOTES = 31
-MANUAL_COLS_START = 32
+COL_GUESTS = 7
+COL_STAY_PATTERN = 8
+COL_ONE_NIGHT_STAY = 9
+COL_TARGET_ADR = 16
+COL_VS_TARGET_DOLLAR = 17
+COL_VS_TARGET_PCT = 18
+COL_MY_SEASON_ADR = 19
+COL_VS_MY_SEASON_PCT = 20
+COL_MARKET_P25 = 21
+COL_MARKET_P90 = 22
+COL_GAP_BEFORE_SIGNAL = 27
+COL_GAP_AFTER_SIGNAL = 29
+STATUS_COL = 30
+RESERVATION_ID_COL = 31
+COL_OVERRIDE_NOTES = 32
+MANUAL_COLS_START = 33
 MANUAL_COLS_COUNT = 11
 
 assert len(HEADERS) == MANUAL_COLS_START - 1 + MANUAL_COLS_COUNT
@@ -129,15 +130,17 @@ MANUAL_PERCENT_SUFFIX_COLS = {
 }
 
 DATE_COLS = {2, 4}  # Check-in, Check-out
-MONEY_COLS = {12, 13, 15, 16, COL_MARKET_P25, COL_MARKET_P90}  # dollar-formatted numeric columns
+MONEY_COLS = {13, 14, COL_TARGET_ADR, COL_VS_TARGET_DOLLAR, COL_MARKET_P25, COL_MARKET_P90}
 PCT_COLS = {COL_VS_TARGET_PCT, COL_VS_MY_SEASON_PCT}  # true fractional percentages (0.05 = 5%)
 HEADER_ROW = 4
 FIRST_DATA_ROW = 5
 
 COLUMN_WIDTHS_BY_NUMBER = {
-    1: 22, 2: 10, 3: 6, 4: 10, 5: 6, 7: 13, 8: 7, 9: 10, 10: 8, 11: 9,
-    12: 8, 13: 9, 17: 8, 18: 22, 19: 8, 22: 10, 23: 16, 25: 8, 26: 26,
-    27: 8, 28: 26, STATUS_COL: 12, RESERVATION_ID_COL: 14,
+    1: 22, 2: 10, 3: 6, 4: 10, 5: 6, COL_GUESTS: 8, COL_STAY_PATTERN: 13,
+    COL_ONE_NIGHT_STAY: 7, 10: 10, 11: 8, 12: 9, 13: 8, 14: 9, 18: 8,
+    COL_MY_SEASON_ADR: 22, COL_VS_MY_SEASON_PCT: 8, 23: 10, 24: 16,
+    26: 8, 27: 26, 28: 8, COL_GAP_AFTER_SIGNAL: 26,
+    STATUS_COL: 12, RESERVATION_ID_COL: 14,
     COL_OVERRIDE_NOTES: 26, MANUAL_COLS_START: 24, MANUAL_COLS_START + 1: 22,
     MANUAL_COLS_START + 2: 16, MANUAL_COLS_START + 3: 20, MANUAL_COLS_START + 4: 16,
     MANUAL_COLS_START + 5: 14, MANUAL_COLS_START + 6: 16, MANUAL_COLS_START + 7: 12,
@@ -199,27 +202,28 @@ def build_booking_quality_sheet(
         _write_date(ws, r, 4, row.check_out)
         ws.cell(row=r, column=5, value=row.check_out.strftime("%a"))
         ws.cell(row=r, column=6, value=row.nights)
-        ws.cell(row=r, column=7, value=row.stay_pattern)
-        ws.cell(row=r, column=8, value="Yes" if row.one_night_stay else None)
-        _write_date(ws, r, 9, row.booked_date)
-        ws.cell(row=r, column=10, value=row.booking_window_days)
-        ws.cell(row=r, column=11, value=row.bw_vs_median)
-        ws.cell(row=r, column=12, value=row.my_adr)
-        ws.cell(row=r, column=13, value=row.my_revenue)
-        ws.cell(row=r, column=14, value=row.source)
-        ws.cell(row=r, column=15, value=row.target_adr_p75)
-        ws.cell(row=r, column=16, value=row.vs_target_dollar)
-        ws.cell(row=r, column=17, value=row.vs_target_pct)
+        ws.cell(row=r, column=COL_GUESTS, value=row.guest_count)
+        ws.cell(row=r, column=COL_STAY_PATTERN, value=row.stay_pattern)
+        ws.cell(row=r, column=COL_ONE_NIGHT_STAY, value="Yes" if row.one_night_stay else None)
+        _write_date(ws, r, 10, row.booked_date)
+        ws.cell(row=r, column=11, value=row.booking_window_days)
+        ws.cell(row=r, column=12, value=row.bw_vs_median)
+        ws.cell(row=r, column=13, value=row.my_adr)
+        ws.cell(row=r, column=14, value=row.my_revenue)
+        ws.cell(row=r, column=15, value=row.source)
+        ws.cell(row=r, column=COL_TARGET_ADR, value=row.target_adr_p75)
+        ws.cell(row=r, column=COL_VS_TARGET_DOLLAR, value=row.vs_target_dollar)
+        ws.cell(row=r, column=COL_VS_TARGET_PCT, value=row.vs_target_pct)
         ws.cell(row=r, column=COL_MY_SEASON_ADR, value=row.my_season_adr)
         ws.cell(row=r, column=COL_VS_MY_SEASON_PCT, value=row.vs_my_season_pct)
         ws.cell(row=r, column=COL_MARKET_P25, value=row.market_p25)
         ws.cell(row=r, column=COL_MARKET_P90, value=row.market_p90)
-        ws.cell(row=r, column=22, value=row.stly_adr)
-        ws.cell(row=r, column=23, value=row.ly_occ)
-        ws.cell(row=r, column=24, value=row.demand_tier)
-        ws.cell(row=r, column=25, value=row.gap_before_days)
+        ws.cell(row=r, column=23, value=row.stly_adr)
+        ws.cell(row=r, column=24, value=row.ly_occ)
+        ws.cell(row=r, column=25, value=row.demand_tier)
+        ws.cell(row=r, column=26, value=row.gap_before_days)
         ws.cell(row=r, column=COL_GAP_BEFORE_SIGNAL, value=row.gap_before_signal)
-        ws.cell(row=r, column=27, value=row.gap_after_days)
+        ws.cell(row=r, column=28, value=row.gap_after_days)
         ws.cell(row=r, column=COL_GAP_AFTER_SIGNAL, value=row.gap_after_signal)
         ws.cell(row=r, column=STATUS_COL, value=row.status)
         ws.cell(row=r, column=RESERVATION_ID_COL, value=row.reservation_id)
@@ -413,6 +417,9 @@ READ_ME_LINES = [
         False,
     ),
     ("", False),
+    ("Guests", True),
+    ("Party size for the booking, straight from PriceLabs -- useful context alongside Nights/ADR (a 12-guest booking and a 2-guest booking at the same ADR aren't really comparable).", False),
+    ("", False),
     ("1-Night Stay", True),
     ("Flagged on its own regardless of price or surrounding gaps — your 'fall-out' booking case.", False),
     ("", False),
@@ -443,6 +450,51 @@ READ_ME_LINES = [
         "stay dates -- the same dated notes you already type by hand when pushing a "
         "pacing/LY-driven override (e.g. '9/12 - Pacing behind by -15.79%'). Pulled in "
         "automatically as context; blank if no override with a reason covers these dates.",
+        False,
+    ),
+    ("", False),
+    ("ADR vs Comp Rating", True),
+    (
+        "Compares your ADR to what you found searching Airbnb.com for the same dates (the "
+        "Comp Check note) -- a snapshot against competitors, nothing to do with demand. "
+        "Above/At/Below Comp are self-explanatory. 'Comp Has No Real Strategy' is for when "
+        "the comps you found don't really vary by season (e.g. always ~$300 weekday / "
+        "$350 weekend year-round) -- when that's the case, this rating alone won't tell "
+        "you much; lean on Demand-ADR Fit and My Season ADR instead, since they compare "
+        "you to demand and to your OWN history rather than to a comp set with no strategy "
+        "of its own.",
+        False,
+    ),
+    ("", False),
+    ("Demand-ADR Fit", True),
+    (
+        "A DIFFERENT comparison from ADR vs Comp Rating: this one checks your ADR against "
+        "the demand signal (Demand Tier / LY occ.), not against competitors. Great = a "
+        "premium ADR on a High-demand date, or a defensibly lower ADR on a Low-demand "
+        "date. Underpriced = High demand but you charged less than you could have -- "
+        "money left on the table. Overpriced = your ADR was higher than what the demand "
+        "level alone would suggest. Overpriced does NOT mean 'bad' or 'above comp' -- it's "
+        "a purely demand-relative call. A booking can be Overpriced-for-demand and still "
+        "be a Verdict = Win; that exact combination (rate the demand said should be low, "
+        "priced high anyway, and someone paid it) is itself a real finding worth testing "
+        "again on similar low-demand dates, not a contradiction to fix.",
+        False,
+    ),
+    ("", False),
+    ("Primary Lever", True),
+    (
+        "What actually got THIS booking to happen -- not whether it was a good outcome "
+        "(that's Verdict, a separate question). Price = booked at your standard/listed "
+        "rate, nothing special active. Min Stay = a minimum-stay REQUIREMENT you had in "
+        "place shaped this booking's length (e.g. you required 2+ nights on that weekend, "
+        "and that's structurally why it's exactly 2 nights, not more) -- not just 'this "
+        "stay happened to be short.' LOS Discount = one of your Airbnb LOS Rule discounts "
+        "was active and plausibly mattered. Pacing Push = an active pacing push (see "
+        "Pacing Push %) is the likely reason. Organic-Unclear = nothing specific stands "
+        "out -- no meaningful discount or push was active, the guest just booked at your "
+        "posted price. When you're unsure between Price and Organic-Unclear, either is "
+        "fine to pick -- the distinction that actually matters for finding patterns later "
+        "is whether an LOS Discount or Pacing Push was active, or not.",
         False,
     ),
     ("", False),
