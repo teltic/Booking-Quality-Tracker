@@ -14,6 +14,7 @@ from __future__ import annotations
 import datetime as dt
 
 from openpyxl import Workbook
+from openpyxl.comments import Comment
 from openpyxl.formatting.rule import FormulaRule
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
@@ -119,6 +120,40 @@ assert [f[0] for f in MANUAL_FIELDS] == HEADERS[MANUAL_COLS_START - 1 :]
 
 MANUAL_COLUMNS = [name for name, _kind, _options in MANUAL_FIELDS]
 
+# Hover-tooltip text for header cells that come up confusing in practice --
+# visible right where you're working (no flipping to the Read Me tab
+# mid-review), condensed from the fuller Read Me tab entries.
+HEADER_COMMENTS = {
+    "ADR vs Comp Rating": (
+        "vs competitors on Airbnb (see Comp Check note). This is NOT about "
+        "demand -- that's Demand-ADR Fit, a separate question."
+    ),
+    "Demand-ADR Fit": (
+        "Was your ADR right for the demand level (Demand Tier / LY occ.)? "
+        "'Overpriced' = priced above what demand alone would suggest -- "
+        "that's fine, even a good sign, if it still booked (see Verdict). "
+        "Overpriced-for-demand + Win = guests will pay a premium sometimes."
+    ),
+    "Airbnb LOS Rule": (
+        "Which of your PriceLabs LOS discount rule sets was active for "
+        "this stay. Can't be auto-detected -- check Airbnb's calendar."
+    ),
+    "LOS / Window Fit": (
+        "Did lead time + length of stay make sense together for the "
+        "season? (far out + high demand should mean longer LOS)"
+    ),
+    "Primary Lever": (
+        "What actually got THIS booking to happen -- not whether it was "
+        "good (that's Verdict). Min Stay = a min-stay RULE you set shaped "
+        "its length, not just 'the stay happened to be short.' "
+        "Organic-Unclear = no real discount/push was active."
+    ),
+    "Verdict": (
+        "Overall, was this booking good? Independent of Demand-ADR Fit -- "
+        "an 'Overpriced'-for-demand booking can still be a Win."
+    ),
+}
+
 # Manual numeric fields get a "9.0%" *display suffix* rather than Excel's
 # true "0.0%" percentage format -- a real percentage format multiplies the
 # stored value by 100 for display, so typing a plain "9" (meaning 9%)
@@ -193,6 +228,10 @@ def build_booking_quality_sheet(
         cell.font = BOLD
         cell.fill = FILL_HEADER
         cell.alignment = Alignment(wrap_text=True, vertical="bottom")
+        # header text without the \n line-wrap used for column-width display
+        comment_text = HEADER_COMMENTS.get(header.replace("\n", " "))
+        if comment_text:
+            cell.comment = Comment(comment_text, "Booking Quality Log")
     ws.freeze_panes = f"A{FIRST_DATA_ROW}"
 
     for r, row in enumerate(rows, start=FIRST_DATA_ROW):
