@@ -111,7 +111,7 @@ def test_manual_columns_match_manual_fields_order():
     assert MANUAL_COLUMNS == [
         "Comp Check (Airbnb)", "ADR vs Comp Rating", "Demand-ADR Fit",
         "Airbnb LOS Rule", "LOS / Window Fit", "LOS Discount % (blended)",
-        "Primary Lever", "Pacing Push %", "Final PL Check", "Verdict",
+        "Primary Reason", "Pacing Push %", "Final PL Check", "Verdict",
         "Lesson Learned",
     ]
 

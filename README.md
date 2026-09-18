@@ -140,7 +140,7 @@ column being added or a manual column being renamed.
 Built for pattern-finding once there are 30-50+ rows, not just per-booking
 notes -- most of these are short **dropdowns** (a click, not typing) so
 they stay consistent enough to filter/pivot on, e.g. "how often did
-Primary Lever = LOS Discount coincide with Verdict = Win in Low demand
+Primary Reason = LOS Discount coincide with Verdict = Win in Low demand
 months":
 
 | Column | Type | Notes |
@@ -151,7 +151,7 @@ months":
 | Airbnb LOS Rule | dropdown | which of your named PriceLabs LOS discount rule sets was active (can't be auto-detected -- PriceLabs' API exposes none of seasonality/day-of-week/overrides/rate-plans by a rule-set name, checked live) |
 | LOS / Window Fit | dropdown | Ideal / Acceptable / Suboptimal -- did lead time and length of stay make sense together for the season? |
 | LOS Discount % (blended) | number | your own manual, revenue-weighted blend across the stay's nights (e.g. a 4-night stay with 1 night at 35% off blends to ~9%, not 35%) |
-| Primary Lever | dropdown | Price / Min Stay / LOS Discount / Pacing Push / Organic-Unclear -- what actually got this booked? |
+| Primary Reason | dropdown | Price / Min Stay / LOS Discount / Pacing Push / Organic-Unclear -- what actually got this booked? |
 | Pacing Push % | number | the push % active when it booked |
 | Final PL Check | free text | your LY/2LY gut-check comparison |
 | Verdict | dropdown | Win / Loss / Neutral / Too Early to Tell |

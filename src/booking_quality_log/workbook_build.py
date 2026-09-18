@@ -68,7 +68,7 @@ HEADERS = [
     "Override Notes\n(PriceLabs)",
     "Comp Check (Airbnb)", "ADR vs Comp Rating", "Demand-ADR Fit",
     "Airbnb LOS Rule", "LOS / Window Fit", "LOS Discount % (blended)",
-    "Primary Lever", "Pacing Push %", "Final PL Check", "Verdict",
+    "Primary Reason", "Pacing Push %", "Final PL Check", "Verdict",
     "Lesson Learned",
 ]
 
@@ -109,7 +109,7 @@ MANUAL_FIELDS = [
     ("Airbnb LOS Rule", "dropdown", ["Sun-Wed Aggressive", "Sun-Wed Minimal", "Sun-Wed Moderate", "None Active"]),
     ("LOS / Window Fit", "dropdown", ["Ideal", "Acceptable", "Suboptimal"]),
     ("LOS Discount % (blended)", "number", None),
-    ("Primary Lever", "dropdown", ["Price", "Min Stay", "LOS Discount", "Pacing Push", "Organic-Unclear"]),
+    ("Primary Reason", "dropdown", ["Price", "Min Stay", "LOS Discount", "Pacing Push", "Organic-Unclear"]),
     ("Pacing Push %", "number", None),
     ("Final PL Check", "text", None),
     ("Verdict", "dropdown", ["Win", "Loss", "Neutral", "Too Early to Tell"]),
@@ -142,7 +142,7 @@ HEADER_COMMENTS = {
         "Did lead time + length of stay make sense together for the "
         "season? (far out + high demand should mean longer LOS)"
     ),
-    "Primary Lever": (
+    "Primary Reason": (
         "What actually got THIS booking to happen -- not whether it was "
         "good (that's Verdict). Min Stay = a min-stay RULE you set shaped "
         "its length, not just 'the stay happened to be short.' "
@@ -520,7 +520,7 @@ READ_ME_LINES = [
         False,
     ),
     ("", False),
-    ("Primary Lever", True),
+    ("Primary Reason", True),
     (
         "What actually got THIS booking to happen -- not whether it was a good outcome "
         "(that's Verdict, a separate question). Price = booked at your standard/listed "
@@ -541,9 +541,9 @@ READ_ME_LINES = [
     (
         "Comp Check (Airbnb), Final PL Check, and Lesson Learned are free-typed. "
         "ADR vs Comp Rating, Demand-ADR Fit, Airbnb LOS Rule, LOS / Window Fit, Primary "
-        "Lever, and Verdict are dropdowns (click, don't type) -- kept as short, "
+        "Reason, and Verdict are dropdowns (click, don't type) -- kept as short, "
         "consistent categories on purpose, since a countable rating is what turns into a "
-        "real clue once you have 30-50 rows (e.g. 'Primary Lever = LOS Discount' + "
+        "real clue once you have 30-50 rows (e.g. 'Primary Reason = LOS Discount' + "
         "'Verdict = Win' happening 8 times in Low demand tells you something concrete). "
         "LOS Discount % (blended) and Pacing Push % are typed numbers. Every one of "
         "these is matched to each row by a hidden Reservation ID column, so a refresh "
